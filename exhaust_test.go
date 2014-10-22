@@ -10,14 +10,8 @@ func TestGetConstantValues(t *testing.T) {
 		code       string
 		valueCount int
 	}{
-		{
-			code:       validCode,
-			valueCount: 3,
-		},
-		{
-			code:       invalidCode,
-			valueCount: 3,
-		},
+		{code: validCode, valueCount: 3},
+		{code: invalidCode, valueCount: 3},
 	}
 
 	for i, tc := range testCases {
@@ -46,19 +40,10 @@ func TestAllExhaustive(t *testing.T) {
 		code       string
 		exhaustive bool
 	}{
-		{
-			code:       validCode,
-			exhaustive: true,
-		},
-		{
-			code:       validCodeWithDefault,
-			exhaustive: true,
-		},
-
-		{
-			code:       invalidCode,
-			exhaustive: false,
-		},
+		{code: validCode, exhaustive: true},
+		{code: validCodeWithDefault, exhaustive: true},
+		{code: validCodeTwoTypes, exhaustive: true},
+		{code: invalidCode, exhaustive: false},
 	}
 
 	for i, tc := range testCases {
@@ -118,6 +103,41 @@ func Good(s Size) {
 	default:
 	}
 }
+`
+
+const validCodeTwoTypes = `
+package thing
+
+type Size int32
+
+const (
+	Small Size = iota
+	Medium
+	Large
+)
+
+type Another string
+
+const (
+	A Another = "A"
+	B Another = "B"
+)
+
+func Good(s Size) {
+	switch s {
+	case Small:
+	case Medium:
+	case Large:
+	}
+}
+
+func AlsoGood(a Another) {
+	switch a {
+	case A:
+	case B:
+	}
+}
+
 `
 
 const invalidCode = `
