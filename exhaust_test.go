@@ -43,6 +43,7 @@ func TestAllExhaustive(t *testing.T) {
 		{code: validCode, exhaustive: true},
 		{code: validCodeWithDefault, exhaustive: true},
 		{code: validCodeTwoTypes, exhaustive: true},
+		{code: validCodeWithNonCheckableSwitch, exhaustive: true},
 		{code: invalidCode, exhaustive: false},
 	}
 
@@ -56,7 +57,7 @@ func TestAllExhaustive(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		e := c.allExhaustive()
+		e, _ := c.allExhaustive()
 		if e != tc.exhaustive {
 			t.Errorf("Expected %v, Got %v (Case %d)", tc.exhaustive, e, i)
 			continue
@@ -81,6 +82,30 @@ func Good(s Size) {
 	case Small:
 	case Medium:
 	case Large:
+	}
+}
+`
+
+const validCodeWithNonCheckableSwitch = `
+package thing
+
+type Size int32
+
+const (
+	Small Size = iota
+	Medium
+	Large
+)
+
+func Good(s Size) {
+	switch s {
+	case Small:
+	case Medium:
+	case Large:
+	}
+
+	switch "SomethingElse" {
+	case "Something":
 	}
 }
 `

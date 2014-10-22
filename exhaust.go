@@ -98,7 +98,8 @@ func (c *checker) isExhaustive(s *ast.SwitchStmt, t types.TypeAndValue) bool {
 	return true
 }
 
-func (c *checker) allExhaustive() bool {
+func (c *checker) allExhaustive() (bool, map[*ast.SwitchStmt]bool) {
+	switches := make(map[*ast.SwitchStmt]bool)
 	exhaustive := true
 	for _, f := range c.files {
 		ast.Inspect(f, func(n ast.Node) bool {
@@ -114,6 +115,7 @@ func (c *checker) allExhaustive() bool {
 						e := c.isExhaustive(s, tagType)
 						if !e {
 							exhaustive = false
+							switches[s] = false
 							return true
 						}
 					}
@@ -122,10 +124,14 @@ func (c *checker) allExhaustive() bool {
 			return true
 		})
 		if !exhaustive {
-			return false // Stop checking more files, we already know we're not exhaustive
+			return false, switches // Stop checking more files, we already know we're not exhaustive
 		}
 	}
-	return exhaustive
+	return exhaustive, switches
+}
+
+func (c *checker) positionString(n ast.Node) string {
+	return c.fileSet.Position(n.Pos()).String()
 }
 
 func main() {
