@@ -211,4 +211,5 @@ func main() {
 			log.Printf("Missing: %s\n", m.ExactString())
 		}
 	}
+	os.Exit(1)
 }
