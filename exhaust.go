@@ -41,6 +41,19 @@ func (c *checker) parse(r io.Reader) error {
 	return nil
 }
 
+func (c *checker) parseDir(path string) error {
+	pkgs, err := parser.ParseDir(c.fileSet, path, nil, 0)
+	if err != nil {
+		return fmt.Errorf("parsing dir: %v", err)
+	}
+	for _, p := range pkgs {
+		for i := range p.Files {
+			c.files = append(c.files, p.Files[i])
+		}
+	}
+	return nil
+}
+
 func (c *checker) populateConstValues() error {
 	config := &types.Config{
 		Importer:    importer.Default(),
@@ -148,15 +161,15 @@ func (c *checker) positionString(n ast.Node) string {
 }
 
 func main() {
+	if len(os.Args) < 2 {
+		log.Println("Expected goexhaust path")
+		return
+	}
+	path := os.Args[1]
+
 	c := newChecker()
 
-	f, err := os.Open("testdata/valid.go")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer f.Close()
-
-	err = c.parse(f)
+	err := c.parseDir(path)
 	if err != nil {
 		log.Fatal(err)
 	}
