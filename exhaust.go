@@ -3,28 +3,27 @@ package main
 import (
 	"fmt"
 	"go/ast"
+	"go/constant"
+	"go/importer"
 	"go/parser"
 	"go/token"
+	"go/types"
 	"io"
 	"log"
-	"strings"
-
-	"code.google.com/p/go.tools/go/exact"
-	_ "code.google.com/p/go.tools/go/gcimporter"
-	"code.google.com/p/go.tools/go/types"
+	"os"
 )
 
 type checker struct {
 	fileSet     *token.FileSet
 	files       []*ast.File
 	info        *types.Info
-	constValues map[types.Type][]exact.Value
+	constValues map[types.Type][]constant.Value
 }
 
 func newChecker() *checker {
 	return &checker{
 		fileSet:     token.NewFileSet(),
-		constValues: make(map[types.Type][]exact.Value),
+		constValues: make(map[types.Type][]constant.Value),
 		info: &types.Info{
 			Defs:  make(map[*ast.Ident]types.Object),
 			Types: make(map[ast.Expr]types.TypeAndValue),
@@ -34,7 +33,7 @@ func newChecker() *checker {
 
 // parser will parse code in r
 func (c *checker) parse(r io.Reader) error {
-	f, err := parser.ParseFile(c.fileSet, "thing.go", r, 0)
+	f, err := parser.ParseFile(c.fileSet, "set.go", r, 0)
 	if err != nil {
 		return fmt.Errorf("parsing code: %v", err)
 	}
@@ -43,7 +42,10 @@ func (c *checker) parse(r io.Reader) error {
 }
 
 func (c *checker) populateConstValues() error {
-	config := &types.Config{}
+	config := &types.Config{
+		Importer:    importer.Default(),
+		FakeImportC: true,
+	}
 	_, err := config.Check("", c.fileSet, c.files, c.info)
 	if err != nil {
 		return fmt.Errorf("checking code: %v", err)
@@ -70,36 +72,47 @@ func (c *checker) populateConstValues() error {
 
 // isExhaustive will check to make sure we have dealt with all possible values
 // of the type t in switch s.
-func (c *checker) isExhaustive(s *ast.SwitchStmt, t types.TypeAndValue) bool {
+func (c *checker) isExhaustive(s *ast.SwitchStmt, t types.TypeAndValue) (bool, []constant.Value) {
 	// No values, nothing to check.
 	if len(c.constValues[t.Type]) == 0 {
-		return true
+		return true, nil
 	}
-	seen := make(map[exact.Value]bool)
+	seen := make(map[constant.Value]bool)
 	for _, stmt := range s.Body.List {
 		switch ss := stmt.(type) {
 		case *ast.CaseClause:
 			if ss.List == nil {
-				return true // We have a default clause so we've covered everything
+				return true, nil // We have a default clause so we've covered everything
 			}
 			for _, e := range ss.List {
 				seen[c.info.Types[e].Value] = true
 			}
 		}
 	}
-	if len(seen) == 0 {
-		return false
-	}
-	for _, v := range c.constValues[t.Type] {
-		if !seen[v] {
-			return false // TODO: Detailed error
+	var missing []constant.Value
+	for i, v := range c.constValues[t.Type] {
+		if seen[v] {
+			continue
 		}
+		missing = append(missing, c.constValues[t.Type][i])
 	}
-	return true
+	if len(missing) == 0 {
+		return true, nil
+	}
+	return false, missing
 }
 
-func (c *checker) allExhaustive() (bool, map[*ast.SwitchStmt]bool) {
-	switches := make(map[*ast.SwitchStmt]bool)
+type result struct {
+	stmt    *ast.SwitchStmt
+	missing []constant.Value
+}
+
+func (r result) exhaustive() bool {
+	return len(r.missing) == 0
+}
+
+func (c *checker) allExhaustive() (bool, []result) {
+	var switches []result
 	exhaustive := true
 	for _, f := range c.files {
 		ast.Inspect(f, func(n ast.Node) bool {
@@ -112,10 +125,13 @@ func (c *checker) allExhaustive() (bool, map[*ast.SwitchStmt]bool) {
 				// We have a tag. Is it a constant we know about?
 				for t, _ := range c.constValues {
 					if tagType.Type == t {
-						e := c.isExhaustive(s, tagType)
+						e, missing := c.isExhaustive(s, tagType)
 						if !e {
 							exhaustive = false
-							switches[s] = false
+							switches = append(switches, result{
+								stmt:    s,
+								missing: missing,
+							})
 							return true
 						}
 					}
@@ -123,9 +139,6 @@ func (c *checker) allExhaustive() (bool, map[*ast.SwitchStmt]bool) {
 			}
 			return true
 		})
-		if !exhaustive {
-			return false, switches // Stop checking more files, we already know we're not exhaustive
-		}
 	}
 	return exhaustive, switches
 }
@@ -136,7 +149,14 @@ func (c *checker) positionString(n ast.Node) string {
 
 func main() {
 	c := newChecker()
-	err := c.parse(strings.NewReader(validCode))
+
+	f, err := os.Open("testdata/valid.go")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	err = c.parse(f)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -144,6 +164,18 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println(c.constValues)
-	log.Println()
+	ok, switches := c.allExhaustive()
+	if ok {
+		return
+	}
+	for _, s := range switches {
+		if s.exhaustive() {
+			continue
+		}
+		p := c.fileSet.Position(s.stmt.Pos())
+		log.Printf("Found non exhaustive switch: %v\n", p)
+		for _, m := range s.missing {
+			log.Printf("Missing: %s\n", m.ExactString())
+		}
+	}
 }
