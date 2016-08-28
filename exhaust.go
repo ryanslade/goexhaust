@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"go/ast"
 	"go/constant"
@@ -11,7 +12,16 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 )
+
+var (
+	flagIncludeTests bool
+)
+
+func init() {
+	flag.BoolVar(&flagIncludeTests, "t", false, "Include tests")
+}
 
 type checker struct {
 	fileSet     *token.FileSet
@@ -41,8 +51,16 @@ func (c *checker) parse(r io.Reader) error {
 	return nil
 }
 
-func (c *checker) parseDir(path string) error {
-	pkgs, err := parser.ParseDir(c.fileSet, path, nil, 0)
+func ignoreTests(fi os.FileInfo) bool {
+	return strings.HasSuffix(fi.Name(), "_test")
+}
+
+func (c *checker) parseDir(path string, includeTests bool) error {
+	filterFn := ignoreTests
+	if includeTests {
+		filterFn = nil
+	}
+	pkgs, err := parser.ParseDir(c.fileSet, path, filterFn, 0)
 	if err != nil {
 		return fmt.Errorf("parsing dir: %v", err)
 	}
@@ -161,15 +179,17 @@ func (c *checker) positionString(n ast.Node) string {
 }
 
 func main() {
+	flag.Parse()
+
 	if len(os.Args) < 2 {
 		log.Println("Expected goexhaust path")
 		return
 	}
-	path := os.Args[1]
+	path := os.Args[len(os.Args)-1]
 
 	c := newChecker()
 
-	err := c.parseDir(path)
+	err := c.parseDir(path, flagIncludeTests)
 	if err != nil {
 		log.Fatal(err)
 	}
