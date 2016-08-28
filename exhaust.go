@@ -101,9 +101,14 @@ func (c *checker) populateConstValues() error {
 	return nil
 }
 
+type valueType struct {
+	Type  types.Type
+	Value constant.Value
+}
+
 // isExhaustive will check to make sure we have dealt with all possible values
 // of the type t in switch s.
-func (c *checker) isExhaustive(s *ast.SwitchStmt, t types.TypeAndValue) (bool, []constant.Value) {
+func (c *checker) isExhaustive(s *ast.SwitchStmt, t types.TypeAndValue) (bool, []valueType) {
 	// No values, nothing to check.
 	if len(c.constValues[t.Type]) == 0 {
 		return true, nil
@@ -120,12 +125,16 @@ func (c *checker) isExhaustive(s *ast.SwitchStmt, t types.TypeAndValue) (bool, [
 			}
 		}
 	}
-	var missing []constant.Value
+	var missing []valueType
 	for i, v := range c.constValues[t.Type] {
 		if seen[v] {
 			continue
 		}
-		missing = append(missing, c.constValues[t.Type][i])
+		vt := valueType{
+			Value: c.constValues[t.Type][i],
+			Type:  t.Type,
+		}
+		missing = append(missing, vt)
 	}
 	if len(missing) == 0 {
 		return true, nil
@@ -135,7 +144,7 @@ func (c *checker) isExhaustive(s *ast.SwitchStmt, t types.TypeAndValue) (bool, [
 
 type result struct {
 	stmt    *ast.SwitchStmt
-	missing []constant.Value
+	missing []valueType
 }
 
 func (r result) exhaustive() bool {
@@ -208,7 +217,7 @@ func main() {
 		p := c.fileSet.Position(s.stmt.Pos())
 		log.Printf("Found non exhaustive switch: %v\n", p)
 		for _, m := range s.missing {
-			log.Printf("Missing: %s\n", m.ExactString())
+			log.Printf("Missing case: (%v) %s\n", m.Type, m.Value.ExactString())
 		}
 	}
 	os.Exit(1)
