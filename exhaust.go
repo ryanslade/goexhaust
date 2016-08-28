@@ -52,7 +52,7 @@ func (c *checker) parse(r io.Reader) error {
 }
 
 func ignoreTests(fi os.FileInfo) bool {
-	return !strings.HasSuffix(fi.Name(), "_test")
+	return !strings.HasSuffix(fi.Name(), "_test.go")
 }
 
 func (c *checker) parseDir(path string, includeTests bool) error {
