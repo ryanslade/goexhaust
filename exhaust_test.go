@@ -21,6 +21,11 @@ func TestGetConstantValues(t *testing.T) {
 			code:       invalidCode,
 			valueCount: 3,
 		},
+		{
+			name:       "Invalid Code With String",
+			code:       invalidCode,
+			valueCount: 3,
+		},
 	}
 
 	for i, tc := range testCases {
@@ -75,6 +80,11 @@ func TestAllExhaustive(t *testing.T) {
 		{
 			name:       "Invalid Code",
 			code:       invalidCode,
+			exhaustive: false,
+		},
+		{
+			name:       "Invalid Code with string",
+			code:       invalidCodeWithString,
 			exhaustive: false,
 		},
 	}
@@ -206,6 +216,25 @@ const (
 	Small Size = iota
 	Medium
 	Large
+)
+
+func Good(s Size) {
+	switch s {
+	case Small:
+	case Large:
+	}
+}
+`
+
+const invalidCodeWithString = `
+package thing
+
+type Size string
+
+const (
+	Small Size = "Small"
+	Medium Size = "Medium"
+	Large Size = "Large"
 )
 
 func Good(s Size) {
